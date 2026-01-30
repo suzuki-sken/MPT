@@ -23,7 +23,7 @@ st.title("現代ポートフォリオ理論：基本4資産シミュレーター
 st.sidebar.header("設定")
 
 # 基本4資産（国内株、先進国株、国内債、先進国債）すべて東証ETF
-default_tickers = "1306.T,1550.T,2510.T,1677.T"
+default_tickers = "ACWI,1306.T,1550.T,2510.T,1677.T"
 
 tickers_input = st.sidebar.text_input("銘柄コード (カンマ区切り)", default_tickers)
 
