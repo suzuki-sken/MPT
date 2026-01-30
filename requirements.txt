@@ -1,6 +1,7 @@
+altair == 6.0.0
 yfinance
 numpy
 pandas
 plotly
-streamlit
+streamlit == 1.53.1
 matplotlib
