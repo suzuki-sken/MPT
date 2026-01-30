@@ -28,11 +28,11 @@ default_tickers = "1306.T,1550.T,2510.T,1677.T"
 tickers_input = st.sidebar.text_input("銘柄コード (カンマ区切り)", default_tickers)
 
 # 無リスク金利
-risk_free_rate_pct = st.sidebar.number_input("無リスク金利 (%)", value=0.1, step=0.05)
+risk_free_rate_pct = st.sidebar.number_input("無リスク金利 (%)", value=1.0, step=0.05)
 risk_free_rate = risk_free_rate_pct / 100.0
 
 # 開始日
-start_date = st.sidebar.date_input("開始日", pd.to_datetime("2018-01-01"))
+start_date = st.sidebar.date_input("開始日", pd.to_datetime("2010-01-01"))
 num_portfolios = st.sidebar.slider("シミュレーション回数", 1000, 10000, 5000)
 
 # --- 2. メイン処理 ---
