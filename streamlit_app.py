@@ -93,24 +93,6 @@ risk_free_rate = risk_free_rate_pct / 100.0
 start_date = st.sidebar.date_input("開始日", pd.to_datetime("2010-01-01"))
 num_portfolios = st.sidebar.slider("シミュレーション回数", 1000, 10000, 5000)
 
-# 取れるリスク（目標リスク）の指定
-use_target_risk = st.sidebar.checkbox(
-    "取れるリスク（目標リスク）を指定する",
-    value=False,
-    help="指定したリスク（年率・標準偏差）で期待リターンを最大化するポートフォリオを表示します。",
-)
-target_risk_pct = None
-if use_target_risk:
-    target_risk_pct = st.sidebar.number_input(
-        "目標リスク（年率・標準偏差 %）",
-        min_value=0.5,
-        max_value=50.0,
-        value=10.0,
-        step=0.5,
-        format="%.1f",
-        help="例: 10 → 年率リスク（標準偏差）10%",
-    )
-
 # --- 2. セッション状態（キャッシュキー・結果の保持）---
 if "portfolio_result" not in st.session_state:
     st.session_state.portfolio_result = None
@@ -119,7 +101,7 @@ if "portfolio_cache_key" not in st.session_state:
 
 def make_cache_key():
     tickers_list = sorted([t.strip() for t in tickers_input.split(",") if t.strip()])
-    return (tuple(tickers_list), start_date, risk_free_rate_pct, num_portfolios, target_risk_pct)
+    return (tuple(tickers_list), start_date, risk_free_rate_pct, num_portfolios)
 
 current_cache_key = make_cache_key()
 force_run = st.sidebar.button("シミュレーション実行")
@@ -203,37 +185,6 @@ def run_and_store_result():
         "Sharpe": max_sharpe_sharpe,
     })
 
-    # --- 目標リスクを指定した場合：そのリスクで期待リターン最大化 ---
-    target_risk_port = None
-    target_risk_weights = None
-    if target_risk_pct is not None:
-        target_sigma = (target_risk_pct / 100.0) ** 2  # 分散に変換
-        if target_risk_pct / 100.0 < min_risk_std - 1e-6:
-            # 指定リスクが最小分散より小さい場合は最小分散ポートフォリオを表示
-            target_risk_weights = min_risk_weights.copy()
-            target_risk_port = min_risk_port.copy()
-        else:
-            def neg_return(w):
-                return -(w @ mu)
-
-            cons_target = (
-                {"type": "eq", "fun": lambda w: np.sum(w) - 1.0},
-                {"type": "eq", "fun": lambda w: (w @ cov_matrix @ w) - target_sigma},
-            )
-            res_target = minimize(
-                neg_return, x0=x0, method="SLSQP", bounds=bnds, constraints=cons_target
-            )
-            if res_target.success:
-                target_risk_weights = res_target.x
-                tr_std = np.sqrt(target_risk_weights @ cov_matrix @ target_risk_weights)
-                tr_ret = target_risk_weights @ mu
-                tr_sharpe = (tr_ret - risk_free_rate) / max(tr_std, 1e-12)
-                target_risk_port = pd.Series({
-                    "Risk": tr_std,
-                    "Return": tr_ret,
-                    "Sharpe": tr_sharpe,
-                })
-
     ind_risks = np.sqrt(np.diag(cov_matrix))
     ind_returns = mu
     display_names = [TICKER_DISPLAY_NAMES.get(t, t) for t in active_tickers]
@@ -256,8 +207,6 @@ def run_and_store_result():
         "max_sharpe_weights": max_sharpe_weights,
         "min_risk_port": min_risk_port,
         "min_risk_weights": min_risk_weights,
-        "target_risk_port": target_risk_port,
-        "target_risk_weights": target_risk_weights,
         "corr_matrix": corr_matrix,
         "display_names": display_names,
         "ind_df": ind_df,
@@ -271,8 +220,6 @@ def render_result(res):
     max_sharpe_weights = res["max_sharpe_weights"]
     min_risk_port = res["min_risk_port"]
     min_risk_weights = res["min_risk_weights"]
-    target_risk_port = res.get("target_risk_port")
-    target_risk_weights = res.get("target_risk_weights")
     corr_matrix = res["corr_matrix"]
     display_names = res["display_names"]
     ind_df = res["ind_df"]
@@ -326,12 +273,6 @@ def render_result(res):
             mode="markers", marker=dict(color="blue", size=15, symbol="diamond"),
             name="最小分散",
         ))
-        if target_risk_port is not None and target_risk_weights is not None:
-            fig.add_trace(go.Scatter(
-                x=[target_risk_port["Risk"]], y=[target_risk_port["Return"]],
-                mode="markers", marker=dict(color="orange", size=16, symbol="hexagon"),
-                name="目標リスクポートフォリオ",
-            ))
         fig.update_layout(
             height=600,
             title="効率的フロンティア (円建て)",
@@ -342,8 +283,7 @@ def render_result(res):
         st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
-        n_cols = 3 if (target_risk_port is not None and target_risk_weights is not None) else 2
-        cols = st.columns(n_cols)
+        col_best, col_safe = st.columns(2)
 
         def display_stats(container, title, port_data, weights, color_code):
             with container:
@@ -367,10 +307,8 @@ def render_result(res):
                     use_container_width=True, hide_index=True,
                 )
 
-        display_stats(cols[0], "★ 接点ポートフォリオ (最大効率)", max_sharpe_port, max_sharpe_weights, "#FF4B4B")
-        display_stats(cols[1], "◆ 最小分散ポートフォリオ (安定重視)", min_risk_port, min_risk_weights, "#1E90FF")
-        if target_risk_port is not None and target_risk_weights is not None:
-            display_stats(cols[2], "◎ 目標リスクポートフォリオ", target_risk_port, target_risk_weights, "#FF8C00")
+        display_stats(col_best, "★ 接点ポートフォリオ (最大効率)", max_sharpe_port, max_sharpe_weights, "#FF4B4B")
+        display_stats(col_safe, "◆ 最小分散ポートフォリオ (安定重視)", min_risk_port, min_risk_weights, "#1E90FF")
 
         st.markdown("---")
         st.subheader("個別銘柄のパフォーマンス指標")
